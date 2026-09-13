@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>PIMPERMSUB AR #065 FIX4</title>
+<title>PIMPERMSUB AR #065 FIX5 — Camera 0 HD Focus</title>
 <script type="importmap">
 {"imports":{
   "three":"https://unpkg.com/three@0.160.0/build/three.module.js",
@@ -43,8 +43,55 @@ const $=id=>document.getElementById(id);
 const statusEl=$('status'), video=$('video');
 let THREE=null, MindARThree=null, mindar=null, anchor=null, plane=null, texture=null;
 let mode='full', sound=false, loaded=false;
+let camera0=null;
 
 function msg(t){statusEl.textContent=t}
+
+async function selectCamera0(){
+  msg('กำลังตรวจสอบ Camera 0…');
+  // Ask for camera permission first so Chrome exposes stable device IDs.
+  let probe=null;
+  try{
+    probe=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}},
+      audio:false
+    });
+  }catch(e){
+    // MindAR can request the camera itself if the permission probe is unavailable.
+    console.warn('Camera permission probe:',e);
+  }
+
+  try{
+    const devices=await navigator.mediaDevices.enumerateDevices();
+    const cameras=devices.filter(d=>d.kind==='videoinput');
+    if(cameras.length){
+      // User-selected convention for this prototype: Camera 0 is the primary rear camera.
+      camera0=cameras[0];
+      console.log('PIMPERMSUB Camera 0:',camera0.label||'(label hidden)',camera0.deviceId);
+    }
+  }catch(e){console.warn('enumerateDevices:',e)}
+
+  if(probe) probe.getTracks().forEach(t=>t.stop());
+}
+
+async function tuneCameraFocus(){
+  // MindAR creates the camera <video> inside #ar. Apply HD + continuous autofocus
+  // when the Android browser exposes these capabilities. Unsupported constraints are ignored.
+  const camVideo=document.querySelector('#ar video');
+  const track=camVideo?.srcObject?.getVideoTracks?.()[0];
+  if(!track) return;
+  try{
+    const caps=track.getCapabilities?.()||{};
+    const advanced={};
+    if(caps.focusMode?.includes?.('continuous')) advanced.focusMode='continuous';
+    if(caps.width?.max>=1920) advanced.width={ideal:1920};
+    if(caps.height?.max>=1080) advanced.height={ideal:1080};
+    if(caps.frameRate?.max>=30) advanced.frameRate={ideal:30};
+    if(Object.keys(advanced).length) await track.applyConstraints({advanced:[advanced]});
+    console.log('Camera capabilities:',caps);
+    console.log('Camera settings:',track.getSettings?.());
+  }catch(e){console.warn('Camera tuning skipped:',e)}
+}
 
 async function loadEngine(){
   if(loaded) return;
@@ -85,12 +132,15 @@ function makePlane(){
 async function startAR(){
   try{
     await loadEngine();
+    if(!camera0) await selectCamera0();
 
     if(!mindar){
       msg('กำลังสร้าง AR…');
       mindar=new MindARThree({
         container:document.querySelector('#ar'),
         imageTargetSrc:'./targets.mind',
+        environmentDeviceId:camera0?.deviceId || undefined,
+        resolution:'1080p',
         filterMinCF:0.0005,
         filterBeta:1000,
         warmupTolerance:8,
@@ -126,7 +176,9 @@ async function startAR(){
 
     msg('กำลังเปิดกล้อง…');
     await mindar.start();
-    msg('กล้องพร้อม ✓ ส่อง sample.png');
+    await tuneCameraFocus();
+    const label=camera0?.label ? camera0.label : 'Camera 0';
+    msg('กล้องพร้อม ✓ Camera 0 — '+label+' — 1080p');
   }catch(e){
     console.error(e);
     msg('ERROR: '+(e?.message||String(e)));
