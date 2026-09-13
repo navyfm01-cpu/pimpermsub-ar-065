@@ -1,19 +1,165 @@
-<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>PIMPERMSUB AR #065 FIX1</title>
-<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:system-ui,sans-serif}#ar{position:fixed;inset:0}#status,#mode{position:fixed;z-index:9;left:12px;background:#000a;color:#fff;padding:9px 12px;border-radius:10px}#status{top:12px;right:12px}#mode{top:58px}#ui{position:fixed;z-index:10;bottom:12px;left:0;right:0;display:flex;flex-wrap:wrap;gap:8px;justify-content:center}button,select{padding:12px;border:0;border-radius:12px;background:#181818;color:#fff;font-size:14px}#video{position:fixed;left:-9999px;width:1px;height:1px}</style>
-<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","mindar-image-three":"https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"}}</script></head>
-<body><div id="ar"></div><div id="status">พร้อม — กด START AR</div><div id="mode">MODE: FULL OVERLAY</div><video id="video" playsinline muted preload="auto"></video>
-<div id="ui"><select id="modeSelect"><option value="full">Full Video Overlay</option><option value="alpha">Transparent / Alpha Video</option></select><button id="start">START AR</button><button id="stop">STOP</button><button id="sound">SOUND OFF</button><button id="fs">FULLSCREEN</button></div>
-<script type="module">
-import * as THREE from 'three'; import {MindARThree} from 'mindar-image-three';
-const $=x=>document.getElementById(x), status=$('status'), video=$('video');
-let mindar=null,anchor=null,plane=null,texture=null,mode='full',sound=false;
-function msg(x){status.textContent=x}
-function makePlane(){if(!anchor)return;if(plane){anchor.group.remove(plane);plane.geometry.dispose();plane.material.dispose();texture?.dispose()}texture=new THREE.VideoTexture(video);texture.colorSpace=THREE.SRGBColorSpace;texture.minFilter=THREE.LinearFilter;texture.magFilter=THREE.LinearFilter;plane=new THREE.Mesh(new THREE.PlaneGeometry(1,1.3333333),new THREE.MeshBasicMaterial({map:texture,transparent:mode==='alpha',depthWrite:mode!=='alpha',side:THREE.DoubleSide}));anchor.group.add(plane)}
-async function setup(){if(mindar)return;msg('กำลังโหลด AR engine…');mindar=new MindARThree({container:document.querySelector('#ar'),imageTargetSrc:'./targets.mind',filterMinCF:.0005,filterBeta:1000,warmupTolerance:8,missTolerance:12,targetFPS:30,maxTrack:1,uiScanning:'no',uiLoading:'no'});const {renderer,scene,camera}=mindar;anchor=mindar.addAnchor(0);makePlane();anchor.onTargetFound=async()=>{msg('พบ Target ✓');try{await video.play();msg('พบ Target ✓ กำลังแสดง AR')}catch(e){msg('พบ Target ✓ — แตะ SOUND ON')}};anchor.onTargetLost=()=>{video.pause();msg('ไม่พบ Target — เล็งกล้องไปที่ sample.png')};renderer.setAnimationLoop(()=>renderer.render(scene,camera));msg('พร้อม ✓ กด START AR')}
-$('start').onclick=async()=>{try{await setup();msg('กำลังเปิดกล้อง…');await mindar.start();msg('กล้องพร้อม ✓ ส่อง sample.png')}catch(e){console.error(e);msg('ERROR: '+(e?.message||e));alert('PIMPERMSUB AR #065\n\nเริ่ม AR ไม่สำเร็จ:\n'+(e?.message||e))}};
-$('stop').onclick=async()=>{try{video.pause();if(mindar)await mindar.stop();msg('หยุด AR แล้ว')}catch(e){msg('STOP ERROR: '+e.message)}};
-$('sound').onclick=async()=>{sound=!sound;video.muted=!sound;$('sound').textContent=sound?'SOUND ON':'SOUND OFF';try{await video.play()}catch(e){}};
-$('fs').onclick=async()=>{try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();else await document.exitFullscreen()}catch(e){}};
-$('modeSelect').onchange=e=>{mode=e.target.value;$('mode').textContent='MODE: '+(mode==='full'?'FULL OVERLAY':'TRANSPARENT / ALPHA');video.pause();video.currentTime=0;video.src=mode==='full'?'./1000033896.mp4':'./1000033896-alpha.webm';video.load();makePlane();msg(mode==='full'?'Full Overlay พร้อม ✓':'Alpha Mode — ต้องใช้ WebM ที่มี Alpha')};
-video.src='./1000033896.mp4';video.load();
-</script></body></html>
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>PIMPERMSUB AR #065 FIX2</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:system-ui,sans-serif}
+#ar{position:fixed;inset:0;z-index:1}
+#status,#mode{position:fixed;z-index:20;left:12px;background:rgba(0,0,0,.72);color:#fff;padding:9px 12px;border-radius:10px}
+#status{top:12px;right:12px}
+#mode{top:58px}
+#ui{position:fixed;z-index:30;bottom:12px;left:0;right:0;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:10px;pointer-events:auto}
+button,select{padding:13px 15px;border:0;border-radius:12px;background:#181818;color:#fff;font-size:14px;touch-action:manipulation}
+button:active{transform:scale(.97)}
+#video{position:fixed;left:-9999px;width:1px;height:1px}
+</style>
+</head>
+<body>
+<div id="ar"></div>
+<div id="status">พร้อม — กด START AR</div>
+<div id="mode">MODE: FULL OVERLAY</div>
+<video id="video" playsinline muted preload="auto"></video>
+<div id="ui">
+<select id="modeSelect">
+<option value="full">Full Video Overlay</option>
+<option value="alpha">Transparent / Alpha Video</option>
+</select>
+<button id="start">START AR</button>
+<button id="stop">STOP</button>
+<button id="sound">SOUND OFF</button>
+<button id="fs">FULLSCREEN</button>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const statusEl=$('status'), video=$('video');
+let THREE=null, MindARThree=null, mindar=null, anchor=null, plane=null, texture=null;
+let mode='full', sound=false, loaded=false;
+
+function msg(t){statusEl.textContent=t}
+
+async function loadEngine(){
+  if(loaded) return;
+  msg('กำลังโหลด AR engine…');
+  const threeMod=await import('https://unpkg.com/three@0.160.0/build/three.module.js');
+  const mindMod=await import('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js');
+  THREE=threeMod;
+  MindARThree=mindMod.MindARThree;
+  if(!MindARThree) throw new Error('ไม่พบ MindARThree จาก CDN');
+  loaded=true;
+}
+
+function makePlane(){
+  if(!anchor) return;
+  if(plane){
+    anchor.group.remove(plane);
+    plane.geometry.dispose();
+    plane.material.dispose();
+    texture?.dispose();
+  }
+  texture=new THREE.VideoTexture(video);
+  texture.colorSpace=THREE.SRGBColorSpace;
+  texture.minFilter=THREE.LinearFilter;
+  texture.magFilter=THREE.LinearFilter;
+  texture.generateMipmaps=false;
+  plane=new THREE.Mesh(
+    new THREE.PlaneGeometry(1,1.3333333),
+    new THREE.MeshBasicMaterial({
+      map:texture,
+      transparent:mode==='alpha',
+      depthWrite:mode!=='alpha',
+      side:THREE.DoubleSide
+    })
+  );
+  anchor.group.add(plane);
+}
+
+async function startAR(){
+  try{
+    await loadEngine();
+
+    if(!mindar){
+      msg('กำลังสร้าง AR…');
+      mindar=new MindARThree({
+        container:document.querySelector('#ar'),
+        imageTargetSrc:'./targets.mind',
+        filterMinCF:0.0005,
+        filterBeta:1000,
+        warmupTolerance:8,
+        missTolerance:12,
+        targetFPS:30,
+        maxTrack:1,
+        uiScanning:'no',
+        uiLoading:'no'
+      });
+
+      const renderer=mindar.renderer;
+      const scene=mindar.scene;
+      const camera=mindar.camera;
+      anchor=mindar.addAnchor(0);
+      makePlane();
+
+      anchor.onTargetFound=async()=>{
+        msg('พบ Target ✓');
+        try{
+          await video.play();
+          msg('พบ Target ✓ กำลังแสดง AR');
+        }catch(e){
+          msg('พบ Target ✓ — กด SOUND ON เพื่อเล่นวิดีโอ');
+        }
+      };
+      anchor.onTargetLost=()=>{
+        video.pause();
+        msg('ไม่พบ Target — เล็งกล้องไปที่ sample.png');
+      };
+
+      renderer.setAnimationLoop(()=>renderer.render(scene,camera));
+    }
+
+    msg('กำลังเปิดกล้อง…');
+    await mindar.start();
+    msg('กล้องพร้อม ✓ ส่อง sample.png');
+  }catch(e){
+    console.error(e);
+    msg('ERROR: '+(e?.message||String(e)));
+    alert('PIMPERMSUB AR #065 FIX2\\n\\n'+(e?.message||e));
+  }
+}
+
+$('start').addEventListener('click',startAR,{passive:false});
+$('stop').addEventListener('click',async()=>{
+  try{
+    video.pause();
+    if(mindar) await mindar.stop();
+    msg('หยุด AR แล้ว');
+  }catch(e){msg('STOP ERROR: '+e.message)}
+});
+$('sound').addEventListener('click',async()=>{
+  sound=!sound;
+  video.muted=!sound;
+  $('sound').textContent=sound?'SOUND ON':'SOUND OFF';
+  try{await video.play()}catch(e){}
+});
+$('fs').addEventListener('click',async()=>{
+  try{
+    if(!document.fullscreenElement) await document.documentElement.requestFullscreen();
+    else await document.exitFullscreen();
+  }catch(e){}
+});
+$('modeSelect').addEventListener('change',e=>{
+  mode=e.target.value;
+  $('mode').textContent='MODE: '+(mode==='full'?'FULL OVERLAY':'TRANSPARENT / ALPHA');
+  video.pause();
+  video.currentTime=0;
+  video.src=mode==='full'?'./1000033896.mp4':'./1000033896-alpha.webm';
+  video.load();
+  makePlane();
+  msg(mode==='full'?'Full Overlay พร้อม ✓':'Alpha Mode — ต้องใช้ WebM ที่มี Alpha');
+});
+video.src='./1000033896.mp4';
+video.load();
+</script>
+</body>
+</html>
