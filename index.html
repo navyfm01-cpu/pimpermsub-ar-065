@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>PIMPERMSUB AR #065 FIX5 — Camera 0 HD Focus</title>
+<title>PIMPERMSUB AR #065 FIX6 — Camera 1 HD Focus</title>
 <script type="importmap">
 {"imports":{
   "three":"https://unpkg.com/three@0.160.0/build/three.module.js",
@@ -43,12 +43,12 @@ const $=id=>document.getElementById(id);
 const statusEl=$('status'), video=$('video');
 let THREE=null, MindARThree=null, mindar=null, anchor=null, plane=null, texture=null;
 let mode='full', sound=false, loaded=false;
-let camera0=null;
+let camera1=null;
 
 function msg(t){statusEl.textContent=t}
 
-async function selectCamera0(){
-  msg('กำลังตรวจสอบ Camera 0…');
+async function selectCamera1(){
+  msg('กำลังตรวจสอบ Camera 1…');
   // Ask for camera permission first so Chrome exposes stable device IDs.
   let probe=null;
   try{
@@ -65,9 +65,9 @@ async function selectCamera0(){
     const devices=await navigator.mediaDevices.enumerateDevices();
     const cameras=devices.filter(d=>d.kind==='videoinput');
     if(cameras.length){
-      // User-selected convention for this prototype: Camera 0 is the primary rear camera.
-      camera0=cameras[0];
-      console.log('PIMPERMSUB Camera 0:',camera0.label||'(label hidden)',camera0.deviceId);
+      // User-selected convention for this prototype: Camera 1 is the rear camera.
+      camera1=cameras[1] || cameras[0];
+      console.log('PIMPERMSUB Camera 1:',camera1.label||'(label hidden)',camera1.deviceId);
     }
   }catch(e){console.warn('enumerateDevices:',e)}
 
@@ -132,14 +132,14 @@ function makePlane(){
 async function startAR(){
   try{
     await loadEngine();
-    if(!camera0) await selectCamera0();
+    if(!camera1) await selectCamera1();
 
     if(!mindar){
       msg('กำลังสร้าง AR…');
       mindar=new MindARThree({
         container:document.querySelector('#ar'),
         imageTargetSrc:'./targets.mind',
-        environmentDeviceId:camera0?.deviceId || undefined,
+        environmentDeviceId:camera1?.deviceId || undefined,
         resolution:'1080p',
         filterMinCF:0.0005,
         filterBeta:1000,
@@ -177,12 +177,12 @@ async function startAR(){
     msg('กำลังเปิดกล้อง…');
     await mindar.start();
     await tuneCameraFocus();
-    const label=camera0?.label ? camera0.label : 'Camera 0';
-    msg('กล้องพร้อม ✓ Camera 0 — '+label+' — 1080p');
+    const label=camera1?.label ? camera1.label : 'Camera 1';
+    msg('กล้องพร้อม ✓ Camera 1 — '+label+' — 1080p');
   }catch(e){
     console.error(e);
     msg('ERROR: '+(e?.message||String(e)));
-    alert('PIMPERMSUB AR #065 FIX3\\n\\n'+(e?.message||e));
+    alert('PIMPERMSUB AR #065 FIX6\\n\\n'+(e?.message||e));
   }
 }
 
