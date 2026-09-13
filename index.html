@@ -3,221 +3,76 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>PIMPERMSUB AR #065 FIX6 — Camera 1 HD Focus</title>
+<title>PIMPERMSUB AR #065 FIX7 — Camera 1 HD Stable Tracking</title>
 <script type="importmap">
-{"imports":{
-  "three":"https://unpkg.com/three@0.160.0/build/three.module.js",
-  "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"
-}}
+{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}
 </script>
 <style>
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:system-ui,sans-serif}
-#ar{position:fixed;inset:0;z-index:1}
-#status,#mode{position:fixed;z-index:20;left:12px;background:rgba(0,0,0,.72);color:#fff;padding:9px 12px;border-radius:10px}
-#status{top:12px;right:12px}
-#mode{top:58px}
-#ui{position:fixed;z-index:30;bottom:12px;left:0;right:0;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:10px;pointer-events:auto}
-button,select{padding:13px 15px;border:0;border-radius:12px;background:#181818;color:#fff;font-size:14px;touch-action:manipulation}
-button:active{transform:scale(.97)}
-#video{position:fixed;left:-9999px;width:1px;height:1px}
+#ar{position:fixed;inset:0;z-index:1} #status,#mode{position:fixed;z-index:20;left:12px;background:rgba(0,0,0,.72);color:#fff;padding:9px 12px;border-radius:10px}
+#status{top:12px;right:12px} #mode{top:58px} #ui{position:fixed;z-index:30;bottom:12px;left:0;right:0;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:10px;pointer-events:auto}
+button,select{padding:13px 15px;border:0;border-radius:12px;background:#181818;color:#fff;font-size:14px;touch-action:manipulation} button:active{transform:scale(.97)} #video{position:fixed;left:-9999px;width:1px;height:1px}
 </style>
 </head>
 <body>
 <div id="ar"></div>
-<div id="status">พร้อม — กด START AR</div>
-<div id="mode">MODE: FULL OVERLAY</div>
+<div id="status">พร้อม — กด START AR</div><div id="mode">MODE: FULL OVERLAY</div>
 <video id="video" playsinline muted preload="auto"></video>
-<div id="ui">
-<select id="modeSelect">
-<option value="full">Full Video Overlay</option>
-<option value="alpha">Transparent / Alpha Video</option>
-</select>
-<button id="start">START AR</button>
-<button id="stop">STOP</button>
-<button id="sound">SOUND OFF</button>
-<button id="fs">FULLSCREEN</button>
-</div>
-
+<div id="ui"><select id="modeSelect"><option value="full">Full Video Overlay</option><option value="alpha">Transparent / Alpha Video</option></select><button id="start">START AR</button><button id="stop">STOP</button><button id="sound">SOUND OFF</button><button id="fs">FULLSCREEN</button></div>
 <script>
-const $=id=>document.getElementById(id);
-const statusEl=$('status'), video=$('video');
-let THREE=null, MindARThree=null, mindar=null, anchor=null, plane=null, texture=null;
-let mode='full', sound=false, loaded=false;
-let camera1=null;
-
+const $=id=>document.getElementById(id); const statusEl=$('status'),video=$('video');
+let THREE,MindARThree,mindar,anchor,plane,texture,mode='full',sound=false,loaded=false,camera1;
 function msg(t){statusEl.textContent=t}
 
 async function selectCamera1(){
-  msg('กำลังตรวจสอบ Camera 1…');
-  // Ask for camera permission first so Chrome exposes stable device IDs.
-  let probe=null;
-  try{
-    probe=await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}},
-      audio:false
-    });
-  }catch(e){
-    // MindAR can request the camera itself if the permission probe is unavailable.
-    console.warn('Camera permission probe:',e);
-  }
-
-  try{
-    const devices=await navigator.mediaDevices.enumerateDevices();
-    const cameras=devices.filter(d=>d.kind==='videoinput');
-    if(cameras.length){
-      // User-selected convention for this prototype: Camera 1 is the rear camera.
-      camera1=cameras[1] || cameras[0];
-      console.log('PIMPERMSUB Camera 1:',camera1.label||'(label hidden)',camera1.deviceId);
-    }
-  }catch(e){console.warn('enumerateDevices:',e)}
-
-  if(probe) probe.getTracks().forEach(t=>t.stop());
+  msg('กำลังตรวจสอบ Camera 1…'); let probe;
+  try{probe=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}},audio:false})}catch(e){console.warn('Camera permission probe:',e)}
+  try{const cameras=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput'); camera1=cameras[1]||cameras[0]; console.log('PIMPERMSUB Camera 1:',camera1?.label||'(label hidden)',camera1?.deviceId)}catch(e){console.warn('enumerateDevices:',e)}
+  probe?.getTracks().forEach(t=>t.stop());
 }
 
 async function tuneCameraFocus(){
-  // MindAR creates the camera <video> inside #ar. Apply HD + continuous autofocus
-  // when the Android browser exposes these capabilities. Unsupported constraints are ignored.
-  const camVideo=document.querySelector('#ar video');
-  const track=camVideo?.srcObject?.getVideoTracks?.()[0];
-  if(!track) return;
-  try{
-    const caps=track.getCapabilities?.()||{};
-    const advanced={};
-    if(caps.focusMode?.includes?.('continuous')) advanced.focusMode='continuous';
-    if(caps.width?.max>=1920) advanced.width={ideal:1920};
-    if(caps.height?.max>=1080) advanced.height={ideal:1080};
-    if(caps.frameRate?.max>=30) advanced.frameRate={ideal:30};
-    if(Object.keys(advanced).length) await track.applyConstraints({advanced:[advanced]});
-    console.log('Camera capabilities:',caps);
-    console.log('Camera settings:',track.getSettings?.());
-  }catch(e){console.warn('Camera tuning skipped:',e)}
+  const track=document.querySelector('#ar video')?.srcObject?.getVideoTracks?.()[0]; if(!track)return;
+  const caps=track.getCapabilities?.()||{}; const advanced={};
+  // Only request controls that this phone reports. A failed optional tuning never stops AR.
+  if(caps.focusMode?.includes?.('continuous')) advanced.focusMode='continuous';
+  if(caps.exposureMode?.includes?.('continuous')) advanced.exposureMode='continuous';
+  if(caps.whiteBalanceMode?.includes?.('continuous')) advanced.whiteBalanceMode='continuous';
+  try{if(Object.keys(advanced).length)await track.applyConstraints({advanced:[advanced]})}catch(e){console.warn('Focus/exposure tuning skipped:',e)}
+  try{await track.applyConstraints({width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}})}catch(e){console.warn('HD constraint fallback:',e)}
+  console.log('Camera capabilities:',caps); console.log('Camera settings:',track.getSettings?.());
 }
 
 async function loadEngine(){
-  if(loaded) return;
-  msg('กำลังโหลด AR engine…');
-  const threeMod=await import('https://unpkg.com/three@0.160.0/build/three.module.js');
-  const mindMod=await import('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js');
-  THREE=threeMod;
-  MindARThree=mindMod.MindARThree;
-  if(!MindARThree) throw new Error('ไม่พบ MindARThree จาก CDN');
-  loaded=true;
+  if(loaded)return; msg('กำลังโหลด AR engine…');
+  THREE=await import('https://unpkg.com/three@0.160.0/build/three.module.js');
+  const mindMod=await import('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js'); MindARThree=mindMod.MindARThree;
+  if(!MindARThree)throw new Error('ไม่พบ MindARThree จาก CDN'); loaded=true;
 }
-
 function makePlane(){
-  if(!anchor) return;
-  if(plane){
-    anchor.group.remove(plane);
-    plane.geometry.dispose();
-    plane.material.dispose();
-    texture?.dispose();
-  }
-  texture=new THREE.VideoTexture(video);
-  texture.colorSpace=THREE.SRGBColorSpace;
-  texture.minFilter=THREE.LinearFilter;
-  texture.magFilter=THREE.LinearFilter;
-  texture.generateMipmaps=false;
-  plane=new THREE.Mesh(
-    new THREE.PlaneGeometry(1,1.3333333),
-    new THREE.MeshBasicMaterial({
-      map:texture,
-      transparent:mode==='alpha',
-      depthWrite:mode!=='alpha',
-      side:THREE.DoubleSide
-    })
-  );
-  anchor.group.add(plane);
+  if(!anchor)return; if(plane){anchor.group.remove(plane);plane.geometry.dispose();plane.material.dispose();texture?.dispose()}
+  texture=new THREE.VideoTexture(video); texture.colorSpace=THREE.SRGBColorSpace; texture.minFilter=THREE.LinearFilter; texture.magFilter=THREE.LinearFilter; texture.generateMipmaps=false;
+  plane=new THREE.Mesh(new THREE.PlaneGeometry(1,1.3333333),new THREE.MeshBasicMaterial({map:texture,transparent:mode==='alpha',depthWrite:mode!=='alpha',side:THREE.DoubleSide})); anchor.group.add(plane);
 }
-
 async function startAR(){
-  try{
-    await loadEngine();
-    if(!camera1) await selectCamera1();
-
-    if(!mindar){
-      msg('กำลังสร้าง AR…');
-      mindar=new MindARThree({
-        container:document.querySelector('#ar'),
-        imageTargetSrc:'./targets.mind',
-        environmentDeviceId:camera1?.deviceId || undefined,
-        resolution:'1080p',
-        filterMinCF:0.0005,
-        filterBeta:1000,
-        warmupTolerance:8,
-        missTolerance:12,
-        targetFPS:30,
-        maxTrack:1,
-        uiScanning:'no',
-        uiLoading:'no'
-      });
-
-      const renderer=mindar.renderer;
-      const scene=mindar.scene;
-      const camera=mindar.camera;
-      anchor=mindar.addAnchor(0);
-      makePlane();
-
-      anchor.onTargetFound=async()=>{
-        msg('พบ Target ✓');
-        try{
-          await video.play();
-          msg('พบ Target ✓ กำลังแสดง AR');
-        }catch(e){
-          msg('พบ Target ✓ — กด SOUND ON เพื่อเล่นวิดีโอ');
-        }
-      };
-      anchor.onTargetLost=()=>{
-        video.pause();
-        msg('ไม่พบ Target — เล็งกล้องไปที่ sample.png');
-      };
-
-      renderer.setAnimationLoop(()=>renderer.render(scene,camera));
-    }
-
-    msg('กำลังเปิดกล้อง…');
-    await mindar.start();
-    await tuneCameraFocus();
-    const label=camera1?.label ? camera1.label : 'Camera 1';
-    msg('กล้องพร้อม ✓ Camera 1 — '+label+' — 1080p');
-  }catch(e){
-    console.error(e);
-    msg('ERROR: '+(e?.message||String(e)));
-    alert('PIMPERMSUB AR #065 FIX6\\n\\n'+(e?.message||e));
+ try{
+  await loadEngine(); if(!camera1)await selectCamera1();
+  if(!mindar){
+   msg('กำลังสร้าง AR…'); mindar=new MindARThree({container:document.querySelector('#ar'),imageTargetSrc:'./targets.mind',environmentDeviceId:camera1?.deviceId||undefined,resolution:'1080p',
+     // FIX7: steadier pose filtering; tolerances prevent brief detection loss from flickering the video.
+     filterMinCF:0.0008,filterBeta:350,warmupTolerance:10,missTolerance:15,targetFPS:30,maxTrack:1,uiScanning:'no',uiLoading:'no'});
+   const {renderer,scene,camera}=mindar; anchor=mindar.addAnchor(0); makePlane();
+   anchor.onTargetFound=async()=>{msg('พบ Target ✓');try{await video.play();msg('พบ Target ✓ กำลังแสดง AR')}catch(e){msg('พบ Target ✓ — กด SOUND ON เพื่อเล่นวิดีโอ')}};
+   anchor.onTargetLost=()=>{video.pause();msg('ไม่พบ Target — เล็งกล้องไปที่ sample.png')}; renderer.setAnimationLoop(()=>renderer.render(scene,camera));
   }
+  msg('กำลังเปิดกล้อง…'); await mindar.start(); await tuneCameraFocus(); msg('กล้องพร้อม ✓ Camera 1 — '+(camera1?.label||'Camera 1')+' — HD / Focus');
+ }catch(e){console.error(e);msg('ERROR: '+(e?.message||String(e)));alert('PIMPERMSUB AR #065 FIX7\n\n'+(e?.message||e))}
 }
-
 $('start').addEventListener('click',startAR,{passive:false});
-$('stop').addEventListener('click',async()=>{
-  try{
-    video.pause();
-    if(mindar) await mindar.stop();
-    msg('หยุด AR แล้ว');
-  }catch(e){msg('STOP ERROR: '+e.message)}
-});
-$('sound').addEventListener('click',async()=>{
-  sound=!sound;
-  video.muted=!sound;
-  $('sound').textContent=sound?'SOUND ON':'SOUND OFF';
-  try{await video.play()}catch(e){}
-});
-$('fs').addEventListener('click',async()=>{
-  try{
-    if(!document.fullscreenElement) await document.documentElement.requestFullscreen();
-    else await document.exitFullscreen();
-  }catch(e){}
-});
-$('modeSelect').addEventListener('change',e=>{
-  mode=e.target.value;
-  $('mode').textContent='MODE: '+(mode==='full'?'FULL OVERLAY':'TRANSPARENT / ALPHA');
-  video.pause();
-  video.currentTime=0;
-  video.src=mode==='full'?'./1000033896.mp4':'./1000033896-alpha.webm';
-  video.load();
-  makePlane();
-  msg(mode==='full'?'Full Overlay พร้อม ✓':'Alpha Mode — ต้องใช้ WebM ที่มี Alpha');
-});
-video.src='./1000033896.mp4';
-video.load();
+$('stop').addEventListener('click',async()=>{try{video.pause();if(mindar)await mindar.stop();msg('หยุด AR แล้ว')}catch(e){msg('STOP ERROR: '+e.message)}});
+$('sound').addEventListener('click',async()=>{sound=!sound;video.muted=!sound;$('sound').textContent=sound?'SOUND ON':'SOUND OFF';try{await video.play()}catch(e){}});
+$('fs').addEventListener('click',async()=>{try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();else await document.exitFullscreen()}catch(e){}});
+$('modeSelect').addEventListener('change',e=>{mode=e.target.value;$('mode').textContent='MODE: '+(mode==='full'?'FULL OVERLAY':'TRANSPARENT / ALPHA');video.pause();video.currentTime=0;video.src=mode==='full'?'./1000033896.mp4':'./1000033896-alpha.webm';video.load();makePlane();msg(mode==='full'?'Full Overlay พร้อม ✓':'Alpha Mode — ต้องใช้ WebM ที่มี Alpha')});
+video.src='./1000033896.mp4';video.load();
 </script>
-</body>
-</html>
+</body></html>
